@@ -25,6 +25,18 @@ export class Promyse {
   }
 
   /**
+   * Promise A+ 规范的 then 方法。
+   */
+  then(
+    onFulfilled?: (data: any) => void,
+    onRejected?: (reason: any) => void,
+  ) {
+    return new Promyse((resolve, reject) => {
+      //
+    })
+  }
+
+  /**
    * 改变当前任务的状态和相关数据
    *
    * @param {State} newState - 新的状态

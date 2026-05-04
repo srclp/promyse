@@ -10,6 +10,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsdown",
+    "test": "vitest",
     "lint": "eslint",
     "lint:fix": "eslint --fix"
   },

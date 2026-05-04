@@ -1,0 +1,1 @@
+export { Promyse } from './Promyse'

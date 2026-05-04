@@ -1,0 +1,24 @@
+{
+  "name": "@srclp/promyse",
+  "type": "module",
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.33.2",
+  "description": "A hand-written Promise implementation in JavaScript.",
+  "author": "Moozon",
+  "license": "MIT",
+  "keywords": [],
+  "main": "index.js",
+  "scripts": {
+    "build": "tsdown",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^8.2.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-format": "^2.0.1",
+    "tsdown": "^0.21.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

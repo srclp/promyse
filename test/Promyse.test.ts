@@ -2,10 +2,19 @@
 import { Promyse } from '../src/Promyse'
 
 function inspectPromyse(promyse: Promyse) {
-  return promyse as unknown as {
+  const instance = promyse as unknown as {
     _state: 'pending' | 'fulfilled' | 'rejected'
     _value: unknown
   }
+
+  return {
+    _state: instance._state,
+    _value: instance._value,
+  }
+}
+
+async function flushMicroTasks() {
+  await new Promise<void>(resolve => setTimeout(resolve, 0))
 }
 
 describe('promyse', () => {
@@ -121,6 +130,166 @@ describe('promyse', () => {
     expect(inspectPromyse(fulfilled)).toEqual({
       _state: 'fulfilled',
       _value: 'later',
+    })
+  })
+
+  it('then 会返回一个新的 Promyse 实例', () => {
+    const promyse = new Promyse(resolve => resolve('done'))
+    const chained = promyse.then(value => value, undefined)
+
+    expect(chained).toBeInstanceOf(Promyse)
+    expect(chained).not.toBe(promyse)
+  })
+
+  it('fulfilled 状态的 then 回调会在微任务中异步执行', async () => {
+    const callOrder: string[] = []
+    const promyse = new Promyse(resolve => resolve('done'))
+
+    promyse.then((value) => {
+      callOrder.push(`handler:${value}`)
+    }, undefined)
+
+    callOrder.push('sync')
+
+    expect(callOrder).toEqual(['sync'])
+
+    await flushMicroTasks()
+
+    expect(callOrder).toEqual(['sync', 'handler:done'])
+  })
+
+  it('rejected 状态的 then 回调会在微任务中异步执行', async () => {
+    const callOrder: string[] = []
+    const promyse = new Promyse((_resolve, reject) => reject('boom'))
+
+    promyse.then(undefined, (reason) => {
+      callOrder.push(`handler:${reason}`)
+    })
+
+    callOrder.push('sync')
+
+    expect(callOrder).toEqual(['sync'])
+
+    await flushMicroTasks()
+
+    expect(callOrder).toEqual(['sync', 'handler:boom'])
+  })
+
+  it('onFulfilled 的返回值会传给下一个 then', async () => {
+    const chained = new Promyse(resolve => resolve(1))
+      .then(value => value + 1, undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 2,
+    })
+  })
+
+  it('省略 onFulfilled 时会透传 fulfilled 的值', async () => {
+    const chained = new Promyse(resolve => resolve('pass-through'))
+      .then(undefined, undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'pass-through',
+    })
+  })
+
+  it('省略 onRejected 时会透传 rejected 的原因', async () => {
+    const reason = new Error('pass-through')
+    const chained = new Promyse((_resolve, reject) => reject(reason))
+      .then(undefined, undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'rejected',
+      _value: reason,
+    })
+  })
+
+  it('onRejected 返回普通值时会让下一个 Promyse 变为 fulfilled', async () => {
+    const chained = new Promyse((_resolve, reject) => reject('boom'))
+      .then(undefined, reason => `recovered:${reason}`)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'recovered:boom',
+    })
+  })
+
+  it('then 回调抛错时会让下一个 Promyse 进入 rejected', async () => {
+    const error = new Error('handler failed')
+    const chained = new Promyse(resolve => resolve('done'))
+      .then(() => {
+        throw error
+      }, undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'rejected',
+      _value: error,
+    })
+  })
+
+  it('then 返回 promise-like 对象时会吸收其 fulfilled 结果', async () => {
+    const chained = new Promyse(resolve => resolve('start'))
+      .then(() => ({
+        then(resolve: (value: string) => void) {
+          resolve('nested done')
+        },
+      }), undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'nested done',
+    })
+  })
+
+  it('then 返回 promise-like 对象时会吸收其 rejected 原因', async () => {
+    const reason = new Error('nested failed')
+    const chained = new Promyse(resolve => resolve('start'))
+      .then(() => ({
+        then(
+          _resolve: (value: string) => void,
+          reject: (reason: Error) => void,
+        ) {
+          reject(reason)
+        },
+      }), undefined)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'rejected',
+      _value: reason,
+    })
+  })
+
+  it('在 Promyse 已经完成后调用 then 也会继续执行处理器', async () => {
+    const promyse = new Promyse(resolve => resolve('done'))
+    const onFulfilled = vi.fn((value: string) => value)
+
+    const chained = promyse.then(onFulfilled, undefined)
+
+    expect(onFulfilled).not.toHaveBeenCalled()
+
+    await flushMicroTasks()
+
+    expect(onFulfilled).toHaveBeenCalledOnce()
+    expect(onFulfilled).toHaveBeenCalledWith('done')
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'done',
     })
   })
 })

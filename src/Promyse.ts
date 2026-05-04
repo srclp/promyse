@@ -1,3 +1,6 @@
+import { registerMicroTask } from './MicroTask'
+import { isPromiseLike } from './utils'
+
 type Executor = (resolve: (data: any) => void, reject: (reason: any) => void) => void
 enum State {
   PENDING = 'pending',
@@ -5,9 +8,17 @@ enum State {
   REJECTED = 'rejected',
 }
 
+interface Handler {
+  executor: undefined | ((data: any) => any)
+  state: State.FULFILLED | State.REJECTED
+  resolve: (data: any) => void
+  reject: (reason: any) => void
+}
+
 export class Promyse {
   private _state: State = State.PENDING
   private _value: any = undefined
+  private _handlers: Handler[] = []
 
   /**
    * @param {Function} executor - 任务执行器，立即执行。
@@ -25,14 +36,81 @@ export class Promyse {
   }
 
   /**
+   * 向处理队列中添加一个处理器
+   *
+   * @param {Function} executor - 处理器函数
+   * @param {State} state - 处理器对应的状态（fulfilled 或 rejected）
+   * @param {Function} resolve - 用于将下一个 Promise 标记为 fulfilled 的函数
+   * @param {Function} reject - 用于将下一个 Promise 标记为 rejected 的函数
+   */
+  _pushHandler(
+    executor: ((data: any) => any) | undefined,
+    state: State.FULFILLED | State.REJECTED,
+    resolve: (data: any) => void,
+    reject: (reason: any) => void,
+  ) {
+    this._handlers.push({
+      executor,
+      state,
+      resolve,
+      reject,
+    })
+  }
+
+  /**
+   * 根据实际情况执行 Handler 队列
+   */
+  _runHandlers() {
+    if (this._state === State.PENDING)
+      return
+
+    while (this._handlers.length) {
+      const handler = this._handlers.shift()
+      this._runOneHandler(handler!)
+    }
+  }
+
+  /**
+   * 处理单个 Handler，根据当前状态和 Handler 的预期状态执行相应的处理逻辑
+   *
+   * @param {Handler} handler - 要处理的 Handler 对象
+   */
+  _runOneHandler({ executor, state, resolve, reject }: Handler) {
+    registerMicroTask(() => {
+      if (this._state !== state)
+        return
+
+      if (typeof executor !== 'function') {
+        this._state === State.FULFILLED
+          ? resolve(this._value)
+          : reject(this._value)
+
+        return
+      }
+      try {
+        const result = executor(this._value)
+        if (isPromiseLike(result))
+          result.then(resolve, reject)
+        else
+          resolve(result)
+      }
+      catch (error) {
+        reject(error)
+      }
+    })
+  }
+
+  /**
    * Promise A+ 规范的 then 方法。
    */
   then(
-    onFulfilled?: (data: any) => void,
-    onRejected?: (reason: any) => void,
+    onFulfilled: ((data: any) => any) | undefined,
+    onRejected: ((reason: any) => any) | undefined,
   ) {
     return new Promyse((resolve, reject) => {
-      //
+      this._pushHandler(onFulfilled, State.FULFILLED, resolve, reject)
+      this._pushHandler(onRejected, State.REJECTED, resolve, reject)
+      this._runHandlers()
     })
   }
 
@@ -48,6 +126,8 @@ export class Promyse {
 
     this._state = newState
     this._value = value
+
+    this._runHandlers()
   }
 
   /**

@@ -1,4 +1,5 @@
 /* eslint-disable no-new */
+import { afterEach, vi } from 'vitest'
 import { Promyse } from '../src/Promyse'
 
 function inspectPromyse(promyse: Promyse) {
@@ -16,6 +17,10 @@ function inspectPromyse(promyse: Promyse) {
 async function flushMicroTasks() {
   await new Promise<void>(resolve => setTimeout(resolve, 0))
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('promyse', () => {
   it('会立即执行传入的执行器', () => {
@@ -290,6 +295,131 @@ describe('promyse', () => {
     expect(inspectPromyse(chained)).toEqual({
       _state: 'fulfilled',
       _value: 'done',
+    })
+  })
+
+  it('catch 会返回一个新的 Promyse 实例', () => {
+    const promyse = new Promyse((_resolve, reject) => reject('boom'))
+    const chained = promyse.catch(reason => reason)
+
+    expect(chained).toBeInstanceOf(Promyse)
+    expect(chained).not.toBe(promyse)
+  })
+
+  it('catch 会在 rejected 时处理错误并恢复为 fulfilled', async () => {
+    const chained = new Promyse((_resolve, reject) => reject('boom'))
+      .catch(reason => `recovered:${reason}`)
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'recovered:boom',
+    })
+  })
+
+  it('catch 不会处理 fulfilled 的值，且会继续透传', async () => {
+    const onRejected = vi.fn()
+    const chained = new Promyse(resolve => resolve('done'))
+      .catch(onRejected)
+
+    await flushMicroTasks()
+
+    expect(onRejected).not.toHaveBeenCalled()
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'done',
+    })
+  })
+
+  it('catch 回调抛错时会让返回的 Promyse 进入 rejected', async () => {
+    const error = new Error('catch failed')
+    const chained = new Promyse((_resolve, reject) => reject('boom'))
+      .catch(() => {
+        throw error
+      })
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'rejected',
+      _value: error,
+    })
+  })
+
+  it('finally 会在 fulfilled 后执行，并透传原始值', async () => {
+    const onFinally = vi.fn()
+    const chained = new Promyse(resolve => resolve('done'))
+      .finally(onFinally)
+
+    await flushMicroTasks()
+
+    expect(onFinally).toHaveBeenCalledOnce()
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'done',
+    })
+  })
+
+  it('简易 finally 会在 rejected 后执行，并将拒因作为 fulfilled 值继续传递', async () => {
+    const onFinally = vi.fn()
+    const reason = new Error('boom')
+    const chained = new Promyse((_resolve, reject) => reject(reason))
+      .finally(onFinally)
+
+    await flushMicroTasks()
+
+    expect(onFinally).toHaveBeenCalledOnce()
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: reason,
+    })
+  })
+
+  it('简易 finally 不会等待 onFinally 返回的 promise-like 对象', async () => {
+    let finallyResolved = false
+    const chained = new Promyse(resolve => resolve('done'))
+      .finally(() => new Promyse((resolve) => {
+        setTimeout(() => {
+          finallyResolved = true
+          resolve(undefined)
+        }, 0)
+      }))
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: 'done',
+    })
+    expect(finallyResolved).toBe(false)
+  })
+
+  it('finally 抛错时会覆盖原本的 fulfilled 结果', async () => {
+    const error = new Error('finally failed')
+    const chained = new Promyse(resolve => resolve('done'))
+      .finally(() => {
+        throw error
+      })
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'rejected',
+      _value: error,
+    })
+  })
+
+  it('简易 finally 不会处理 onFinally 返回的 rejected promise-like', async () => {
+    const originalReason = new Error('original')
+    const chained = new Promyse((_resolve, reject) => reject(originalReason))
+      .finally(() => new Promyse((_resolve, reject) => reject(new Error('finally rejected'))))
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(chained)).toEqual({
+      _state: 'fulfilled',
+      _value: originalReason,
     })
   })
 })

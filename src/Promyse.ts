@@ -96,7 +96,6 @@ export class Promyse {
       }
       catch (error) {
         reject(error)
-        console.error(error)
       }
     })
   }
@@ -151,5 +150,18 @@ export class Promyse {
 
   catch(onRejected: (reason: any) => any) {
     return this.then(undefined, onRejected)
+  }
+
+  finally(onFinally: () => any) {
+    return this.then(
+      (data) => {
+        onFinally()
+        return data
+      },
+      (reason) => {
+        onFinally()
+        return reason
+      },
+    )
   }
 }

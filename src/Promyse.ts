@@ -176,4 +176,10 @@ export class Promyse {
       resolve(data)
     })
   }
+
+  static reject(reason: any) {
+    return new Promyse((resolve, reject) => {
+      reject(reason)
+    })
+  }
 }

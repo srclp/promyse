@@ -472,4 +472,37 @@ describe('promyse', () => {
       _value: reason,
     })
   })
+
+  it('Promyse.reject 传入普通值时会返回 rejected 的 Promyse', () => {
+    const promyse = Promyse.reject('boom')
+
+    expect(promyse).toBeInstanceOf(Promyse)
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'rejected',
+      _value: 'boom',
+    })
+  })
+
+  it('Promyse.reject 传入 Error 时会保留原始错误对象作为拒因', () => {
+    const reason = new Error('boom')
+    const promyse = Promyse.reject(reason)
+
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'rejected',
+      _value: reason,
+    })
+  })
+
+  it('Promyse.reject 不会吸收 promise-like，而是将其本身作为拒因', () => {
+    const thenable = {
+      then: vi.fn(),
+    }
+    const promyse = Promyse.reject(thenable)
+
+    expect(thenable.then).not.toHaveBeenCalled()
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'rejected',
+      _value: thenable,
+    })
+  })
 })

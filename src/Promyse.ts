@@ -96,6 +96,7 @@ export class Promyse {
       }
       catch (error) {
         reject(error)
+        console.error(error)
       }
     })
   }
@@ -146,5 +147,9 @@ export class Promyse {
    */
   private _reject(reason: any) {
     this._changeStateAndValue(State.REJECTED, reason)
+  }
+
+  catch(onRejected: (reason: any) => any) {
+    return this.then(undefined, onRejected)
   }
 }

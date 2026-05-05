@@ -182,4 +182,30 @@ export class Promyse {
       reject(reason)
     })
   }
+
+  static all(pros: any) {
+    return new Promyse((resolve, reject) => {
+      let count = 0 // 用 count 实际上是 lenght 的作用，但是不是所有可迭代对象都有 lenght 属性
+      let fulfilledCount = 0
+      const result: any[] = []
+
+      for (const p of pros) {
+        const curCount = count++
+
+        Promyse.resolve(p).then(
+          (data: any) => {
+            result[curCount] = data
+            fulfilledCount++
+
+            if (fulfilledCount === count)
+              resolve(result)
+          },
+          reject,
+        )
+      }
+
+      if (count === 0)
+        resolve(result)
+    })
+  }
 }

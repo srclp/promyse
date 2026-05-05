@@ -505,4 +505,97 @@ describe('promyse', () => {
       _value: thenable,
     })
   })
+
+  it('Promyse.all 传入空数组时会返回 fulfilled 的空数组', () => {
+    const promyse = Promyse.all([])
+
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'fulfilled',
+      _value: [],
+    })
+  })
+
+  it('Promyse.all 会在所有 Promyse 都 fulfilled 后按原顺序返回结果', async () => {
+    let resolveFirst: ((value: string) => void) | undefined
+    let resolveSecond: ((value: string) => void) | undefined
+    const first = new Promyse((resolve) => {
+      resolveFirst = resolve
+    })
+    const second = new Promyse((resolve) => {
+      resolveSecond = resolve
+    })
+
+    const all = Promyse.all([first, second])
+
+    resolveSecond?.('second')
+    await flushMicroTasks()
+    expect(inspectPromyse(all)).toEqual({
+      _state: 'pending',
+      _value: undefined,
+    })
+
+    resolveFirst?.('first')
+    await flushMicroTasks()
+
+    expect(inspectPromyse(all)).toEqual({
+      _state: 'fulfilled',
+      _value: ['first', 'second'],
+    })
+  })
+
+  it('Promyse.all 中任意一个 rejected 时会立即进入 rejected', async () => {
+    let resolveFirst: ((value: string) => void) | undefined
+    let rejectSecond: ((reason: Error) => void) | undefined
+    const first = new Promyse((resolve) => {
+      resolveFirst = resolve
+    })
+    const secondReason = new Error('boom')
+    const second = new Promyse((_resolve, reject) => {
+      rejectSecond = reject
+    })
+
+    const all = Promyse.all([first, second])
+
+    rejectSecond?.(secondReason)
+    resolveFirst?.('first')
+    await flushMicroTasks()
+
+    expect(inspectPromyse(all)).toEqual({
+      _state: 'rejected',
+      _value: secondReason,
+    })
+  })
+
+  it('Promyse.all 会保留输入顺序，而不是按完成顺序返回', async () => {
+    let resolveFirst: ((value: string) => void) | undefined
+    let resolveSecond: ((value: string) => void) | undefined
+    let resolveThird: ((value: string) => void) | undefined
+    const first = new Promyse((resolve) => {
+      resolveFirst = resolve
+    })
+    const second = new Promyse((resolve) => {
+      resolveSecond = resolve
+    })
+    const third = new Promyse((resolve) => {
+      resolveThird = resolve
+    })
+
+    const all = Promyse.all([first, second, third])
+
+    resolveThird?.('third')
+    resolveFirst?.('first')
+    await flushMicroTasks()
+    expect(inspectPromyse(all)).toEqual({
+      _state: 'pending',
+      _value: undefined,
+    })
+
+    resolveSecond?.('second')
+    await flushMicroTasks()
+
+    expect(inspectPromyse(all)).toEqual({
+      _state: 'fulfilled',
+      _value: ['first', 'second', 'third'],
+    })
+  })
 })

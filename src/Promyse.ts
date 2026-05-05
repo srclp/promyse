@@ -164,4 +164,16 @@ export class Promyse {
       },
     )
   }
+
+  static resolve(data: any) {
+    if (data instanceof Promyse) {
+      return data
+    }
+    return new Promyse((resolve, reject) => {
+      if (isPromiseLike(data)) {
+        data.then(resolve, reject)
+      }
+      resolve(data)
+    })
+  }
 }

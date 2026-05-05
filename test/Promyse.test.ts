@@ -422,4 +422,54 @@ describe('promyse', () => {
       _value: originalReason,
     })
   })
+
+  it('Promyse.resolve 传入普通值时会返回 fulfilled 的 Promyse', () => {
+    const promyse = Promyse.resolve('done')
+
+    expect(promyse).toBeInstanceOf(Promyse)
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'fulfilled',
+      _value: 'done',
+    })
+  })
+
+  it('Promyse.resolve 传入已有的 Promyse 实例时会直接返回原实例', () => {
+    const promyse = new Promyse(resolve => resolve('done'))
+
+    expect(Promyse.resolve(promyse)).toBe(promyse)
+  })
+
+  it('Promyse.resolve 会吸收 promise-like 对象的 fulfilled 结果', async () => {
+    const promyse = Promyse.resolve({
+      then(resolve: (value: string) => void) {
+        resolve('nested done')
+      },
+    })
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'fulfilled',
+      _value: 'nested done',
+    })
+  })
+
+  it('Promyse.resolve 会吸收 promise-like 对象的 rejected 原因', async () => {
+    const reason = new Error('nested failed')
+    const promyse = Promyse.resolve({
+      then(
+        _resolve: (value: string) => void,
+        reject: (reason: Error) => void,
+      ) {
+        reject(reason)
+      },
+    })
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'rejected',
+      _value: reason,
+    })
+  })
 })

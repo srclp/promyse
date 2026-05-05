@@ -208,4 +208,20 @@ export class Promyse {
         resolve(result)
     })
   }
+
+  static allSettled(pros: any) {
+    const ps = []
+
+    for (const p of pros) {
+      ps.push(
+        Promyse.resolve(p)
+          .then(
+            (data: any) => ({ status: State.FULFILLED, data }),
+            (reason: any) => ({ status: State.REJECTED, reason }),
+          ),
+      )
+    }
+
+    return Promyse.all(ps)
+  }
 }

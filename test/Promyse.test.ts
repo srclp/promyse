@@ -598,4 +598,107 @@ describe('promyse', () => {
       _value: ['first', 'second', 'third'],
     })
   })
+
+  it('Promyse.allSettled 传入空数组时会返回 fulfilled 的空数组', () => {
+    const promyse = Promyse.allSettled([])
+
+    expect(inspectPromyse(promyse)).toEqual({
+      _state: 'fulfilled',
+      _value: [],
+    })
+  })
+
+  it('Promyse.allSettled 会等待所有成员结束后返回结果', async () => {
+    let resolveFirst: ((value: string) => void) | undefined
+    let rejectSecond: ((reason: Error) => void) | undefined
+    const first = new Promyse((resolve) => {
+      resolveFirst = resolve
+    })
+    const secondReason = new Error('boom')
+    const second = new Promyse((_resolve, reject) => {
+      rejectSecond = reject
+    })
+
+    const settled = Promyse.allSettled([first, second])
+
+    rejectSecond?.(secondReason)
+    await flushMicroTasks()
+    expect(inspectPromyse(settled)).toEqual({
+      _state: 'pending',
+      _value: undefined,
+    })
+
+    resolveFirst?.('first')
+    await flushMicroTasks()
+
+    expect(inspectPromyse(settled)).toEqual({
+      _state: 'fulfilled',
+      _value: [
+        { status: 'fulfilled', data: 'first' },
+        { status: 'rejected', reason: secondReason },
+      ],
+    })
+  })
+
+  it('Promyse.allSettled 会保留输入顺序，而不是按完成顺序返回', async () => {
+    let resolveFirst: ((value: string) => void) | undefined
+    let resolveSecond: ((value: string) => void) | undefined
+    const first = new Promyse((resolve) => {
+      resolveFirst = resolve
+    })
+    const second = new Promyse((resolve) => {
+      resolveSecond = resolve
+    })
+
+    const settled = Promyse.allSettled([first, second])
+
+    resolveSecond?.('second')
+    await flushMicroTasks()
+    expect(inspectPromyse(settled)).toEqual({
+      _state: 'pending',
+      _value: undefined,
+    })
+
+    resolveFirst?.('first')
+    await flushMicroTasks()
+
+    expect(inspectPromyse(settled)).toEqual({
+      _state: 'fulfilled',
+      _value: [
+        { status: 'fulfilled', data: 'first' },
+        { status: 'fulfilled', data: 'second' },
+      ],
+    })
+  })
+
+  it('Promyse.allSettled 会把普通值和 promise-like 一起转换后收集结果', async () => {
+    const rejectReason = new Error('nested failed')
+    const settled = Promyse.allSettled([
+      1,
+      {
+        then(resolve: (value: string) => void) {
+          resolve('nested done')
+        },
+      },
+      {
+        then(
+          _resolve: (value: string) => void,
+          reject: (reason: Error) => void,
+        ) {
+          reject(rejectReason)
+        },
+      },
+    ])
+
+    await flushMicroTasks()
+
+    expect(inspectPromyse(settled)).toEqual({
+      _state: 'fulfilled',
+      _value: [
+        { status: 'fulfilled', data: 1 },
+        { status: 'fulfilled', data: 'nested done' },
+        { status: 'rejected', reason: rejectReason },
+      ],
+    })
+  })
 })
